@@ -81,7 +81,9 @@ ensure_path() {
   fi
   touch "$shell_rc"
 
+  # shellcheck disable=SC2016
   if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$shell_rc"; then
+    # shellcheck disable=SC2016
     printf '\n# Waqqas Toolset\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$shell_rc"
     ok "Updated PATH in $shell_rc"
   fi
