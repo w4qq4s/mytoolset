@@ -76,8 +76,9 @@ waq_project_name() {
 }
 
 waq_project_notes() {
-  local root
-  root="$(waq_project_root "${1:-$PWD}")" || return 1
+  local start_dir root
+  start_dir="${1:-$PWD}"
+  root="$(waq_project_root "$start_dir")" || return 1
   printf '%s\n' "$root/notes/notes.md"
 }
 
@@ -119,7 +120,7 @@ waq_need_project() {
 waq_note_append() {
   local message="$1"
   local notes_file
-  notes_file="$(waq_project_notes)" || waq_die "Could not find notes.md"
+  notes_file="$(waq_project_notes "$PWD")" || waq_die "Could not find notes.md"
   printf -- "- [%s] %s\n" "$(waq_now)" "$message" >> "$notes_file"
   waq_ok "Added note to $notes_file"
 }
