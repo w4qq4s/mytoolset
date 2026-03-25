@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scanwrap <target> [options]
+
+Options:
+  --name <name>         Prefix for output files, default: slug of target
+  --profile <profile>   quick, full, udp-top, default: quick
+  --outdir <dir>        Output directory, default: project recon or current directory
+  -h, --help            Show this help
+EOF
+}
+
+waq_require nmap
+
+target=""
+name=""
+profile="quick"
+outdir=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --name) shift; name="${1:-}" ;;
+    --profile) shift; profile="${1:-}" ;;
+    --outdir) shift; outdir="${1:-}" ;;
+    -h|--help) usage; exit 0 ;;
+    -*)
+      waq_die "Unknown option: $1"
+      ;;
+    *)
+      if [ -z "$target" ]; then
+        target="$1"
+      else
+        waq_die "Unexpected argument: $1"
+      fi
+      ;;
+  esac
+  shift || true
+done
+
+[ -n "$target" ] || { usage; exit 1; }
+
+[ -n "$name" ] || name="$(waq_slug "$target")"
+[ -n "$outdir" ] || outdir="$(waq_nmap_outdir)"
+waq_ensure_dir "$outdir"
+
+prefix="$outdir/nmap_${name}_${profile}"
+
+case "$profile" in
+  quick)
+    cmd=(nmap -Pn -sC -sV -T4 -oA "$prefix" "$target")
+    ;;
+  full)
+    cmd=(nmap -Pn -p- --min-rate 3000 -oA "$prefix" "$target")
+    ;;
+  udp-top)
+    cmd=(nmap -Pn -sU --top-ports 100 -oA "$prefix" "$target")
+    ;;
+  *)
+    waq_die "Unknown profile: $profile"
+    ;;
+esac
+
+waq_msg "Running: ${cmd[*]}"
+"${cmd[@]}"
+waq_ok "Saved under $prefix.*"

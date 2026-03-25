@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ctfinit <name> [options]
+
+Options:
+  --type <type>     Project type, default: challenge
+  --ip <target>     Target IP or hostname
+  --path <dir>      Base directory, default: current directory
+  --force           Reuse an existing directory
+  -h, --help        Show this help
+EOF
+}
+
+name=""
+ptype="challenge"
+target="-"
+base_dir="$PWD"
+force=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --type) shift; ptype="${1:-}" ;;
+    --ip|--target) shift; target="${1:-}" ;;
+    --path) shift; base_dir="${1:-}" ;;
+    --force) force=1 ;;
+    -h|--help) usage; exit 0 ;;
+    -*)
+      waq_die "Unknown option: $1"
+      ;;
+    *)
+      if [ -z "$name" ]; then
+        name="$1"
+      else
+        waq_die "Unexpected argument: $1"
+      fi
+      ;;
+  esac
+  shift
+done
+
+[ -n "$name" ] || { usage; exit 1; }
+
+slug="$(waq_slug "$name")"
+project_dir="$base_dir/$slug"
+
+if [ -e "$project_dir" ] && [ "$force" -ne 1 ]; then
+  waq_die "Directory already exists: $project_dir (use --force to reuse)"
+fi
+
+waq_ensure_dir "$project_dir"
+for d in recon scans notes loot artifacts extracted web creds scripts exploits; do
+  waq_ensure_dir "$project_dir/$d"
+done
+
+created="$(waq_now)"
+tool_home="$(waq_tool_home)"
+
+waq_template_render "$tool_home/templates/notes.md" "$name" "$ptype" "$target" "$created" > "$project_dir/notes/notes.md"
+waq_template_render "$tool_home/templates/writeup.md" "$name" "$ptype" "$target" "$created" > "$project_dir/notes/writeup.md"
+cp "$tool_home/templates/loot.tsv" "$project_dir/loot/loot.tsv"
+
+cat > "$project_dir/.waqqas-project" <<EOF
+name=$name
+slug=$slug
+type=$ptype
+target=$target
+created=$created
+version=$(waq_version)
+EOF
+
+waq_ok "Created project: $project_dir"
+echo "Next:"
+echo "  cd "$project_dir""
+echo "  wnote "Started working on $name""

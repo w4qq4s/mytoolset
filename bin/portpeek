@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  portpeek <nmap-normal-output-file>
+
+Summarize open ports from an nmap normal output file.
+EOF
+}
+
+file="${1:-}"
+[ -n "$file" ] || { usage; exit 1; }
+[ -f "$file" ] || waq_die "File not found: $file"
+
+echo "Open ports from $file"
+echo
+
+grep -E '^[0-9]+/(tcp|udp)[[:space:]]+open' "$file" | awk '{printf "%-10s %-10s %s\n",$1,$3,$4}' || true
+echo
+
+ports="$(grep -E '^[0-9]+/tcp[[:space:]]+open' "$file" | cut -d/ -f1 | paste -sd, - || true)"
+if [ -n "$ports" ]; then
+  echo "Suggested recheck:"
+  echo "  nmap -p$ports -sC -sV <target> -oN nmap_recheck.txt"
+fi

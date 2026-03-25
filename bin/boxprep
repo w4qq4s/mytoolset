@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  boxprep <name> <ip-or-host> [--tmux]
+
+Create a box-style workspace and optionally a tmux session.
+EOF
+}
+
+name=""
+target=""
+with_tmux=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tmux) with_tmux=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      if [ -z "$name" ]; then
+        name="$1"
+      elif [ -z "$target" ]; then
+        target="$1"
+      else
+        waq_die "Unexpected argument: $1"
+      fi
+      ;;
+  esac
+  shift
+done
+
+[ -n "$name" ] && [ -n "$target" ] || { usage; exit 1; }
+
+ctfinit "$name" --type box --ip "$target"
+project_dir="$PWD/$(waq_slug "$name")"
+
+if [ "$with_tmux" -eq 1 ]; then
+  (cd "$project_dir" && tmuxbox)
+fi
+
+waq_ok "Box workspace ready: $project_dir"

@@ -1,0 +1,9 @@
+*.swp
+*.swo
+*.tmp
+*.log
+*.zip
+*.tar.gz
+*.pyc
+__pycache__/
+.DS_Store

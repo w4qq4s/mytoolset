@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  lootindex add --type <type> --value <value> [--source <source>] [--notes <notes>]
+  lootindex show
+  lootindex path
+
+Manage the current project's loot/loot.tsv file.
+EOF
+}
+
+waq_need_project
+root="$(waq_project_root)"
+loot_file="$root/loot/loot.tsv"
+
+sub="${1:-}"
+[ -n "$sub" ] || { usage; exit 1; }
+shift || true
+
+case "$sub" in
+  add)
+    ltype=""
+    value=""
+    source="-"
+    notes="-"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --type) shift; ltype="${1:-}" ;;
+        --value) shift; value="${1:-}" ;;
+        --source) shift; source="${1:-}" ;;
+        --notes) shift; notes="${1:-}" ;;
+        -h|--help) usage; exit 0 ;;
+        *) waq_die "Unknown option: $1" ;;
+      esac
+      shift || true
+    done
+    [ -n "$ltype" ] && [ -n "$value" ] || waq_die "Both --type and --value are required"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(waq_now)" "$ltype" "$value" "$source" "$notes" >> "$loot_file"
+    waq_ok "Added entry to $loot_file"
+    ;;
+  show)
+    column -t -s $'	' "$loot_file" 2>/dev/null || cat "$loot_file"
+    ;;
+  path)
+    printf '%s\n' "$loot_file"
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

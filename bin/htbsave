@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  htbsave <url> -o <filename> [options]
+
+Options:
+  -o <file>          Output filename inside the project folder
+  --password <pass>  Archive password, default: hackthebox
+  --no-extract       Skip archive extraction
+  --no-hash          Skip sha256 creation
+  -h, --help         Show this help
+EOF
+}
+
+url=""
+outfile=""
+password="hackthebox"
+do_extract=1
+do_hash=1
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) shift; outfile="${1:-}" ;;
+    --password) shift; password="${1:-}" ;;
+    --no-extract) do_extract=0 ;;
+    --no-hash) do_hash=0 ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      if [ -z "$url" ]; then
+        url="$1"
+      else
+        waq_die "Unexpected argument: $1"
+      fi
+      ;;
+  esac
+  shift || true
+done
+
+[ -n "$url" ] && [ -n "$outfile" ] || { usage; exit 1; }
+
+waq_require curl
+
+dirname="${outfile%.*}"
+[ "$dirname" = "$outfile" ] && dirname="${outfile}_download"
+waq_ensure_dir "$dirname"
+
+dest="$dirname/$outfile"
+waq_msg "Downloading to $dest"
+curl -fL --progress-bar "$url" -o "$dest"
+
+cd "$dirname"
+
+if [ "$do_hash" -eq 1 ]; then
+  sha256sum "$outfile" > "$outfile.sha256"
+  waq_ok "Wrote checksum: $dirname/$outfile.sha256"
+fi
+
+if [ "$do_extract" -eq 1 ]; then
+  case "$outfile" in
+    *.zip)
+      mkdir -p extracted
+      unzip -P "$password" -q "$outfile" -d extracted || unzip -q "$outfile" -d extracted || waq_warn "Unzip failed"
+      ;;
+    *.tar.gz|*.tgz|*.tar.xz|*.txz|*.tar.bz2|*.tbz2|*.7z|*.rar)
+      extractall "$outfile" --outdir extracted --password "$password" || true
+      ;;
+  esac
+fi
+
+waq_ok "Done: $(pwd)"

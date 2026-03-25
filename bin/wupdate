@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  wupdate [--with-htb-cli] [--skip-deps]
+
+Download the latest main branch tarball from GitHub and reinstall.
+EOF
+}
+
+WITH_HTB_CLI=0
+SKIP_DEPS=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --with-htb-cli) WITH_HTB_CLI=1 ;;
+    --skip-deps) SKIP_DEPS=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) waq_die "Unknown option: $1" ;;
+  esac
+  shift
+done
+
+waq_require curl
+waq_require tar
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+archive="$tmp/mytoolset.tar.gz"
+curl -fL --progress-bar "https://github.com/w4qq4s/mytoolset/archive/refs/heads/main.tar.gz" -o "$archive"
+tar -xzf "$archive" -C "$tmp"
+
+src="$(find "$tmp" -maxdepth 1 -type d -name 'mytoolset-*' | head -n1)"
+[ -n "$src" ] || waq_die "Could not unpack update tarball"
+
+cmd=(bash "$src/install.sh")
+[ "$WITH_HTB_CLI" -eq 1 ] && cmd+=(--with-htb-cli)
+[ "$SKIP_DEPS" -eq 1 ] && cmd+=(--skip-deps)
+"${cmd[@]}"
+
+waq_ok "Updated Waqqas Toolset"

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  jwtpeek <jwt>
+EOF
+}
+
+jwt="${1:-}"
+[ -n "$jwt" ] || { usage; exit 1; }
+
+IFS='.' read -r header payload signature <<< "$jwt"
+
+b64url_decode() {
+  local in="$1"
+  in="${in//-/+}"
+  in="${in//_/\/}"
+  case $(( ${#in} % 4 )) in
+    2) in="${in}==" ;;
+    3) in="${in}=" ;;
+    1) return 1 ;;
+  esac
+  printf '%s' "$in" | base64 -d 2>/dev/null
+}
+
+header_json="$(b64url_decode "$header" || true)"
+payload_json="$(b64url_decode "$payload" || true)"
+
+echo "Header:"
+printf '%s\n' "$header_json" | jq . 2>/dev/null || printf '%s\n' "$header_json"
+echo
+echo "Payload:"
+printf '%s\n' "$payload_json" | jq . 2>/dev/null || printf '%s\n' "$payload_json"
+echo
+echo "Signature:"
+printf '%s\n' "$signature"
+
+if printf '%s\n' "$payload_json" | jq -e '.exp' >/dev/null 2>&1; then
+  exp="$(printf '%s\n' "$payload_json" | jq -r '.exp')"
+  echo
+  echo "exp (epoch): $exp"
+  date -d "@$exp" '+exp (local): %Y-%m-%d %H:%M:%S %Z' 2>/dev/null || true
+fi

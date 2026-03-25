@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Bash syntax
+        run: bash scripts/smoke-test.sh
+      - name: Shellcheck
+        run: |
+          find bin lib -type f -name '*.sh' -print0 | xargs -0 -n1 shellcheck
+          shellcheck install.sh uninstall.sh

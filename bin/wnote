@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  wnote <message>
+  wnote --file <path> <message>
+
+Append a timestamped note to the current project notes or a chosen file.
+EOF
+}
+
+notes_file=""
+args=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --file) shift; notes_file="${1:-}" ;;
+    -h|--help) usage; exit 0 ;;
+    *) args+=("$1") ;;
+  esac
+  shift || true
+done
+
+[ ${#args[@]} -gt 0 ] || { usage; exit 1; }
+message="${args[*]}"
+
+if [ -n "$notes_file" ]; then
+  printf -- "- [%s] %s
+" "$(waq_now)" "$message" >> "$notes_file"
+  waq_ok "Added note to $notes_file"
+else
+  waq_need_project
+  waq_note_append "$message"
+fi

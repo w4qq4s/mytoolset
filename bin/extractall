@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  extractall <archive> [--outdir <dir>] [--password <password>]
+
+Extract common archive types into a predictable directory.
+EOF
+}
+
+archive=""
+outdir=""
+password="hackthebox"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --outdir) shift; outdir="${1:-}" ;;
+    --password) shift; password="${1:-}" ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      if [ -z "$archive" ]; then
+        archive="$1"
+      else
+        waq_die "Unexpected argument: $1"
+      fi
+      ;;
+  esac
+  shift || true
+done
+
+[ -n "$archive" ] || { usage; exit 1; }
+[ -f "$archive" ] || waq_die "Archive not found: $archive"
+
+[ -n "$outdir" ] || outdir="${archive%.*}_extracted"
+waq_ensure_dir "$outdir"
+
+case "$archive" in
+  *.zip)
+    waq_require unzip
+    unzip -P "$password" -q "$archive" -d "$outdir" || unzip -q "$archive" -d "$outdir"
+    ;;
+  *.tar.gz|*.tgz)
+    waq_require tar
+    tar -xzf "$archive" -C "$outdir"
+    ;;
+  *.tar.xz|*.txz)
+    waq_require tar
+    tar -xJf "$archive" -C "$outdir"
+    ;;
+  *.tar.bz2|*.tbz2)
+    waq_require tar
+    tar -xjf "$archive" -C "$outdir"
+    ;;
+  *.7z)
+    waq_require 7z
+    7z x -y "-o$outdir" "$archive"
+    ;;
+  *.rar)
+    waq_require unrar
+    unrar x -o+ "$archive" "$outdir/"
+    ;;
+  *)
+    waq_die "Unsupported archive type: $archive"
+    ;;
+esac
+
+waq_ok "Extracted to $outdir"

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# WAQQAS_TOOLSET
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/common.sh" ]; then
+  WAQ_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/common.sh" ]; then
+  WAQ_HOME="${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}"
+else
+  echo "[!] Could not locate Waqqas Toolset library. Reinstall with install.sh." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$WAQ_HOME/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  hashid <hash-or-file>
+
+Guess some common hash families and useful cracking modes.
+EOF
+}
+
+input="${1:-}"
+[ -n "$input" ] || { usage; exit 1; }
+
+if [ -f "$input" ]; then
+  hash="$(head -n1 "$input" | tr -d '
+')"
+else
+  hash="$input"
+fi
+
+len="${#hash}"
+
+echo "Hash: $hash"
+echo "Length: $len"
+echo
+
+case "$hash" in
+  \$2a\$*|\$2b\$*|\$2y\$*)
+    echo "Likely: bcrypt"
+    echo "hashcat: -m 3200"
+    echo "john: --format=bcrypt"
+    exit 0
+    ;;
+  [A-Fa-f0-9][A-Fa-f0-9]*)
+    ;;
+  *)
+    echo "Non-hex or structured value. Could be a salted, iterated, or encoded format."
+    ;;
+esac
+
+case "$len" in
+  32)
+    echo "Likely: MD5 or NTLM"
+    echo "hashcat: -m 0 (MD5), -m 1000 (NTLM)"
+    ;;
+  40)
+    echo "Likely: SHA1"
+    echo "hashcat: -m 100"
+    ;;
+  56)
+    echo "Likely: SHA224"
+    ;;
+  64)
+    echo "Likely: SHA256"
+    echo "hashcat: -m 1400"
+    ;;
+  96)
+    echo "Likely: SHA384"
+    ;;
+  128)
+    echo "Likely: SHA512"
+    echo "hashcat: -m 1700"
+    ;;
+  *)
+    echo "No strong heuristic match."
+    ;;
+esac
