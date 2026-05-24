@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# WAQQAS TOOLSET
+
+set -euo pipefail
+
+# ── locate lib ────────────────────────────────────────────────────────────────
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Support both installed layout (~/.waqqas-toolset/lib) and repo layout (../lib)
+if [ -f "${_SELF_DIR}/../lib/pyvenv_lib.sh" ]; then
+    # shellcheck source=../lib/pyvenv_lib.sh
+    source "${_SELF_DIR}/../lib/pyvenv_lib.sh"
+elif [ -f "${HOME}/.waqqas-toolset/lib/pyvenv_lib.sh" ]; then
+    source "${HOME}/.waqqas-toolset/lib/pyvenv_lib.sh"
+else
+    echo "[x] Cannot find pyvenv_lib.sh. Is the toolset installed correctly?" >&2
+    exit 1
+fi
+
+# ── defaults ──────────────────────────────────────────────────────────────────
+OPT_DIR=""
+OPT_VERSION=""
+OPT_NAME=".venv"
+OPT_REQUIREMENTS=""
+OPT_FORCE=0
+
+# ── usage ─────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<'EOF'
+Usage:
+  pyvenv [options]
+
+Options:
+  --dir <path>          Target directory (default: current directory)
+  --version <x.y>       Python version to use (e.g. 3.11)
+  --name <name>         Venv directory name (default: .venv)
+  --requirements <file> requirements.txt to install after creation
+  --force               Skip prompts; overwrite existing venv if present
+  -h, --help            Show this help
+
+Examples:
+  pyvenv
+  pyvenv --version 3.11 --name env
+  pyvenv --dir ~/projects/myapp --requirements requirements.txt
+  pyvenv --version 3.12 --force
+EOF
+}
+
+# ── argument parsing ──────────────────────────────────────────────────────────
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dir)          OPT_DIR="$2";          shift 2 ;;
+        --version)      OPT_VERSION="$2";      shift 2 ;;
+        --name)         OPT_NAME="$2";         shift 2 ;;
+        --requirements) OPT_REQUIREMENTS="$2"; shift 2 ;;
+        --force)        OPT_FORCE=1;           shift   ;;
+        -h|--help)      usage; exit 0          ;;
+        *) pv_err "Unknown option: $1"; usage; exit 1 ;;
+    esac
+done
+
+# ── resolve target directory ──────────────────────────────────────────────────
+TARGET_DIR="${OPT_DIR:-$PWD}"
+TARGET_DIR="$(realpath "$TARGET_DIR" 2>/dev/null || echo "$TARGET_DIR")"
+
+if [ ! -d "$TARGET_DIR" ]; then
+    pv_err "Directory does not exist: $TARGET_DIR"
+    exit 1
+fi
+
+pv_sep
+pv_msg "pyvenv — Waqqas Toolset"
+pv_msg "Target directory: $TARGET_DIR"
+
+# ── venv detection ────────────────────────────────────────────────────────────
+pv_sep
+pv_msg "Scanning for existing venvs..."
+
+mapfile -t EXISTING_VENVS < <(pv_find_venvs "$TARGET_DIR")
+
+VENV_PATH="${TARGET_DIR}/${OPT_NAME}"
+
+if [ "${#EXISTING_VENVS[@]}" -gt 0 ] && [ "${EXISTING_VENVS[0]}" != "" ]; then
+    echo ""
+    pv_warn "Found ${#EXISTING_VENVS[@]} existing venv(s) in this directory:"
+    echo ""
+
+    for entry in "${EXISTING_VENVS[@]}"; do
+        local_dir="${entry%%|*}"
+        local_ver="${entry##*|}"
+        printf "    • %s  (python %s)\n" "$local_dir" "$local_ver"
+    done
+
+    echo ""
+
+    # Check if the intended destination already exists
+    if [ -d "$VENV_PATH" ] && [ -f "${VENV_PATH}/pyvenv.cfg" ]; then
+        if [ "$OPT_FORCE" -eq 1 ]; then
+            pv_warn "--force set; removing existing venv at $VENV_PATH"
+            rm -rf "$VENV_PATH"
+        else
+            echo "  What would you like to do?"
+            echo ""
+            echo "    [1] Use the existing venv at ${VENV_PATH} (just show activate command)"
+            echo "    [2] Delete it and recreate with a new Python version"
+            echo "    [3] Keep it and create a new venv under a different name"
+            echo "    [4] Abort"
+            echo ""
+            pv_ask "Choice [1-4]:"
+            read -r CHOICE
+
+            case "$CHOICE" in
+                1)
+                    pv_print_activate "$VENV_PATH"
+                    exit 0
+                    ;;
+                2)
+                    pv_warn "Removing $VENV_PATH ..."
+                    rm -rf "$VENV_PATH"
+                    ;;
+                3)
+                    pv_ask "New venv name (relative to $TARGET_DIR):"
+                    read -r NEW_NAME
+                    OPT_NAME="${NEW_NAME:-.venv_new}"
+                    VENV_PATH="${TARGET_DIR}/${OPT_NAME}"
+                    ;;
+                4)
+                    pv_msg "Aborted."
+                    exit 0
+                    ;;
+                *)
+                    pv_err "Invalid choice."
+                    exit 1
+                    ;;
+            esac
+        fi
+    else
+        # Venv(s) exist but not at the intended path — just inform and proceed
+        pv_msg "No existing venv at ${VENV_PATH}. Will create a new one there."
+    fi
+else
+    pv_msg "No existing venv found. Will create one."
+fi
+
+# ── python version selection ──────────────────────────────────────────────────
+INTERPRETER="$(pv_pick_python "$OPT_VERSION")" || {
+    pv_err "Could not resolve a Python interpreter. Aborting."
+    exit 1
+}
+
+# ── validate requirements file ────────────────────────────────────────────────
+if [ -n "$OPT_REQUIREMENTS" ]; then
+    if [ ! -f "$OPT_REQUIREMENTS" ]; then
+        pv_err "Requirements file not found: $OPT_REQUIREMENTS"
+        exit 1
+    fi
+    OPT_REQUIREMENTS="$(realpath "$OPT_REQUIREMENTS")"
+fi
+
+# Auto-detect requirements.txt if --requirements not set but file exists
+if [ -z "$OPT_REQUIREMENTS" ] && [ -f "${TARGET_DIR}/requirements.txt" ]; then
+    if [ "$OPT_FORCE" -eq 1 ]; then
+        OPT_REQUIREMENTS="${TARGET_DIR}/requirements.txt"
+        pv_msg "Auto-detected requirements.txt (--force mode)"
+    else
+        echo ""
+        pv_ask "Found requirements.txt in ${TARGET_DIR}. Install it after venv creation? [y/N]:"
+        read -r REQ_CHOICE
+        if [[ "$REQ_CHOICE" =~ ^[Yy]$ ]]; then
+            OPT_REQUIREMENTS="${TARGET_DIR}/requirements.txt"
+        fi
+    fi
+fi
+
+# ── create venv ───────────────────────────────────────────────────────────────
+pv_create_venv "$INTERPRETER" "$VENV_PATH" || exit 1
+
+# ── install requirements ──────────────────────────────────────────────────────
+if [ -n "$OPT_REQUIREMENTS" ]; then
+    pv_install_requirements "$VENV_PATH" "$OPT_REQUIREMENTS" || exit 1
+fi
+
+# ── done ──────────────────────────────────────────────────────────────────────
+pv_print_activate "$VENV_PATH"

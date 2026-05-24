@@ -4,6 +4,7 @@ set -euo pipefail
 TOOLSET_NAME="Waqqas Toolset"
 INSTALL_DIR="${HOME}/.waqqas-toolset"
 BIN_DIR="${HOME}/.local/bin"
+REPO_ARCHIVE_URL="https://github.com/w4qq4s/mytoolset/archive/refs/heads/main.tar.gz"
 WITH_HTB_CLI=0
 SKIP_DEPS=0
 NO_PATH=0
@@ -22,6 +23,11 @@ warn() {
 
 have() {
   command -v "$1" >/dev/null 2>&1
+}
+
+is_repo_root() {
+  local dir="$1"
+  [ -d "$dir/bin" ] && [ -d "$dir/lib" ] && [ -d "$dir/templates" ] && [ -f "$dir/install.sh" ]
 }
 
 usage() {
@@ -90,8 +96,37 @@ ensure_path() {
 }
 
 copy_repo() {
-  local src_dir
-  src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local script_dir src_dir tmp_dir archive_path extracted_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  if is_repo_root "$PWD"; then
+    src_dir="$PWD"
+  elif is_repo_root "$script_dir"; then
+    src_dir="$script_dir"
+  else
+    msg "Repo files not found beside install.sh, downloading source archive"
+    tmp_dir="$(mktemp -d)"
+    archive_path="$tmp_dir/mytoolset.tar.gz"
+
+    if have curl; then
+      curl -fsSL "$REPO_ARCHIVE_URL" -o "$archive_path"
+    elif have wget; then
+      wget -qO "$archive_path" "$REPO_ARCHIVE_URL"
+    else
+      warn "Neither curl nor wget is available to fetch the repo archive"
+      rm -rf "$tmp_dir"
+      exit 1
+    fi
+
+    tar -xzf "$archive_path" -C "$tmp_dir"
+    extracted_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d -name 'mytoolset-*' | head -n1 || true)"
+    if [ -z "$extracted_dir" ] || ! is_repo_root "$extracted_dir"; then
+      warn "Downloaded archive did not contain the expected repo layout"
+      rm -rf "$tmp_dir"
+      exit 1
+    fi
+    src_dir="$extracted_dir"
+  fi
 
   msg "Installing repo into $INSTALL_DIR"
   mkdir -p "$INSTALL_DIR" "$BIN_DIR"
@@ -100,6 +135,8 @@ copy_repo() {
 
   cp -R "$src_dir"/. "$INSTALL_DIR"/
   rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.github" || true
+
+  [ -n "${tmp_dir:-}" ] && rm -rf "$tmp_dir"
 }
 
 install_bins() {
