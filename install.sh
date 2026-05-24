@@ -207,7 +207,12 @@ main() {
   install_bins
   install_htb_cli
   ok "Install complete"
-  echo "Run: wsetup"
+  if echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
+    echo "Run: wsetup"
+  else
+    echo "Run: source ~/.bashrc 2>/dev/null || true"
+    echo "Then: wsetup"
+  fi
 }
 
 main "$@"

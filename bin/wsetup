@@ -34,7 +34,7 @@ echo
 
 echo "Commands:"
 bin_dir="$HOME/.local/bin"
-for cmd in wsetup wupdate ctfinit boxprep tmuxbox wnote wgrep lootindex scanwrap portpeek webprobe dnspeek httphead myip netcheck flagscan extractall hashid jwtpeek htbsave; do
+for cmd in wsetup wupdate ctfinit boxprep tmuxbox wnote wgrep lootindex scanwrap portpeek webprobe dnspeek httphead myip netcheck flagscan extractall hashid jwtpeek htbsave pyvenv; do
   if command -v "$cmd" >/dev/null 2>&1; then
     printf '  [ok] %s -> %s\n' "$cmd" "$(command -v "$cmd")"
   elif [ -x "$bin_dir/$cmd" ]; then

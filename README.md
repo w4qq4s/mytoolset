@@ -69,6 +69,7 @@ This repo complements `htb-cli`; it does not try to replace it.
 - `extractall` - unpack archives into predictable directories
 - `hashid` - quick hash family guesser
 - `jwtpeek` - decode JWT header and payload, and show expiry when present
+- `pyvenv` - create a Python virtual environment with interpreter discovery and optional requirements install
 
 ### HTB helper
 - `htbsave` - download HTB challenge archives with progress, checksum, and password-aware extraction

@@ -10,8 +10,9 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "${_SELF_DIR}/../lib/pyvenv_lib.sh" ]; then
     # shellcheck source=../lib/pyvenv_lib.sh
     source "${_SELF_DIR}/../lib/pyvenv_lib.sh"
-elif [ -f "${HOME}/.waqqas-toolset/lib/pyvenv_lib.sh" ]; then
-    source "${HOME}/.waqqas-toolset/lib/pyvenv_lib.sh"
+elif [ -f "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/pyvenv_lib.sh" ]; then
+    # shellcheck source=/dev/null
+    source "${WAQQAS_TOOLSET_HOME:-$HOME/.waqqas-toolset}/lib/pyvenv_lib.sh"
 else
     echo "[x] Cannot find pyvenv_lib.sh. Is the toolset installed correctly?" >&2
     exit 1
